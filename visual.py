@@ -162,7 +162,12 @@ def renderizar_aba_calculo(m, b, K):
         st.markdown("**Passo A: Cancelamento de Polo Lento**")
         st.latex(rf"z_{{av}} = \frac{{b}}{{m}} = \frac{{{b}}}{{{m}}} = {p_lento:.3f}")
         st.markdown("**Passo B: Alocação do Polo Rápido**")
-        st.latex(rf"p_{{av}} = 5 \cdot z_{{av}} = 5 \cdot {p_lento:.3f} = {p_av_id:.3f}")
+        if 5.0 * p_lento < 10.0:
+            # Se caiu no piso de 10.0, explica visualmente usando a função max()
+            st.latex(rf"p_{{av}} = \max(10.0, \, 5 \cdot z_{{av}}) = \max(10.0, \, {5.0 * p_lento:.3f}) = {p_av_id:.3f}")
+        else:
+        # Se o cálculo natural passou de 10.0, mantém a multiplicação direta original
+            st.latex(rf"p_{{av}} = 5 \cdot z_{{av}} = 5 \cdot {p_lento:.3f} = {p_av_id:.3f}")
         st.markdown("**Passo C: Ganho para Amortecimento Ótimo**")
         st.latex(rf"K_c = \frac{{m \cdot p_{{av}}^2}}{{2 \cdot K}} = \frac{{{m} \cdot {p_av_id:.2f}^2}}{{2 \cdot {K}}} = {Kc_id:.3f}")
 
