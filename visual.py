@@ -151,6 +151,7 @@ def renderizar_aba_calculo(m, b, K):
     st.header("Algoritmo de Sintonia Analítica Ótima")
     p_lento = b / m if m > 0 else 0.1
     p_av_id = max(10.0, 5.0 * p_lento)
+    Kc_bruto = (m * (p_av_id ** 2)) / (2 * K)
     Kc_id = (m * (p_av_id ** 2)) / (2 * K)
     wn_id = p_av_id / 1.414
     z_at_id = wn_id / 10.0
@@ -162,14 +163,14 @@ def renderizar_aba_calculo(m, b, K):
         st.markdown("**Passo A: Cancelamento de Polo Lento**")
         st.latex(rf"z_{{av}} = \frac{{b}}{{m}} = \frac{{{b}}}{{{m}}} = {p_lento:.3f}")
         st.markdown("**Passo B: Alocação do Polo Rápido**")
+        st.latex(rf"p_{{av}} = 5 \cdot z_{{av}} = 5 \cdot {p_lento:.3f} = {p_av_id:.3f}")
         if 5.0 * p_lento < 10.0:
-            # Se caiu no piso de 10.0, explica visualmente usando a função max()
-            st.latex(rf"p_{{av}} = \max(10.0, \, 5 \cdot z_{{av}}) = \max(10.0, \, {5.0 * p_lento:.3f}) = {p_av_id:.3f}")
-        else:
-        # Se o cálculo natural passou de 10.0, mantém a multiplicação direta original
-            st.latex(rf"p_{{av}} = 5 \cdot z_{{av}} = 5 \cdot {p_lento:.3f} = {p_av_id:.3f}")
+            st.caption(f"*OBS: O valor calculado foi de {5.0 * p_lento:.3f}, mas foi ajustado para 10.000 por ser o limite mínimo do projeto.*")
         st.markdown("**Passo C: Ganho para Amortecimento Ótimo**")
         st.latex(rf"K_c = \frac{{m \cdot p_{{av}}^2}}{{2 \cdot K}} = \frac{{{m} \cdot {p_av_id:.2f}^2}}{{2 \cdot {K}}} = {Kc_id:.3f}")
+        # Aviso caso o ganho sature no teto máximo de 5000
+        if Kc_bruto > 5000.0:
+            st.caption(f"*OBS: O ganho teórico calculado seria {Kc_bruto:.3f}, mas foi limitado a 5000.000 por ser o limite máximo permitido pelo sistema.*")
 
     with col_c2:
         st.subheader("2. Projeto da Malha de Atraso (Regime permanente)")
