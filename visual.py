@@ -17,7 +17,6 @@ def renderizar_painel_analise(simulador, t_step, y_step):
     """
     st.subheader("Indicadores de Desempenho")
 
-    # Tratamento matemático das variáveis de saída do Step Response
     y_final = y_step[-1]
     overshoot = max(0, (np.max(y_step) - y_final) / np.abs(y_final) * 100) if abs(y_final) > 0.001 else 0
     erro_abs = np.abs(y_step - y_final)
@@ -26,12 +25,10 @@ def renderizar_painel_analise(simulador, t_step, y_step):
     ts = t_step[indices_fora[-1]] if len(indices_fora) > 0 else 0
     erro_regime = np.abs(1.0 - y_final)
 
-    # Margens de estabilidade do sistema em Malha Aberta
     sys_ma = ctl.tf(simulador.num_L, simulador.den_L)
     gm, pm, wg, wp = ctl.margin(sys_ma)
     pm_str = "∞" if np.isinf(pm) or np.isnan(pm) else f"{pm:.1f}°"
 
-    # Construção do grid visual de métricas
     col_m1, col_m2, col_m3, col_m4 = st.columns(4)
     col_m1.metric("Sobressinal (Overshoot)", f"{overshoot:.1f}%")
     col_m2.metric("Tempo de Acomodação (ts)", f"{ts:.2f} s")
@@ -43,7 +40,7 @@ def renderizar_painel_analise(simulador, t_step, y_step):
 # SEÇÃO: RENDERIZAÇÃO DAS ABAS PRINCIPAIS
 # =====================================================================
 
-def renderizar_aba_principal(simulador, t_step, y_step, aplicar_empurrao, t_empurrao, forca_empurrao, ativar_avanco, ativar_atraso, planta):
+def renderizar_aba_principal(simulador, t_step, y_step, aplicar_empurrao, t_empurrao, forca_empurrao, aplicar_constante, t_constante, forca_constante, ativar_avanco, ativar_atraso, planta):
     """Renderiza os gráficos principais de resposta temporal, frequência e simulação de pista."""
     col1, col2 = st.columns(2)
     
@@ -58,18 +55,22 @@ def renderizar_aba_principal(simulador, t_step, y_step, aplicar_empurrao, t_empu
     with col2:
         st.subheader("Diagrama de Bode (Resposta em Frequência)")
         
-        # Variável para verificar se algum compensador está ativo
+        # Cria um container reservado para o gráfico
+        bode_container = st.container()
+        
+        # Usamos colunas para centralizar o checkbox na tela
+        col_vazia_esq, col_centro, col_vazia_dir = st.columns([1, 2, 1])
+        with col_centro:
+            mostrar_marcadores = st.checkbox("Modo detalhado", value=True)
+        
         usar_compensador = ativar_avanco or ativar_atraso
 
-        # Sistema COM Compensador
         sys_ma_comp = ctl.tf(simulador.num_L, simulador.den_L)
         
-        # Sistema SEM Compensador
         comp_desligado = CompensadorAvancoAtraso(ativo_av=False, ativo_at=False, Kc=1.0)
         sim_sem_comp = SimuladorControle(planta, comp_desligado)
         sys_ma_uncomp = ctl.tf(sim_sem_comp.num_L, sim_sem_comp.den_L)
         
-        # Mapeamento dinâmico dos polos e zeros globais para dimensionar o eixo X
         raizes_globais = np.concatenate((np.roots(simulador.num_L), np.roots(simulador.den_L)))
         raizes_validas = np.abs(raizes_globais[raizes_globais != 0])
         
@@ -81,15 +82,11 @@ def renderizar_aba_principal(simulador, t_step, y_step, aplicar_empurrao, t_empu
             
         w = np.logspace(w_min, w_max, 500)
         
-        # ==========================================================
-        # 1. DESENHO DAS LINHAS PRINCIPAIS (VERDE E/OU VERMELHA)
-        # ==========================================================
         if usar_compensador:
-            # Se compensador está ativo, desenha o Verde como base e adiciona o Vermelho por baixo
             fig_bode = bode(sys_ma_comp, w=w)
             if len(fig_bode.data) >= 2:
                 fig_bode.data[0].line.color = 'green'
-                fig_bode.data[0].name = 'Com Compensador'
+                fig_bode.data[0].name = 'Malha Compensada'
                 fig_bode.data[0].showlegend = True
                 fig_bode.data[1].line.color = 'green'
                 fig_bode.data[1].showlegend = False
@@ -98,167 +95,155 @@ def renderizar_aba_principal(simulador, t_step, y_step, aplicar_empurrao, t_empu
             mag_u_db = 20 * np.log10(mag_u.flatten())
             phase_u_deg = np.degrees(phase_u.flatten())
             
-            fig_bode.add_trace(go.Scatter(x=omega_u.flatten(), y=mag_u_db, mode='lines', line=dict(color='red'), name='Sem Compensador'), row=1, col=1)
-            fig_bode.add_trace(go.Scatter(x=omega_u.flatten(), y=phase_u_deg, mode='lines', line=dict(color='red'), showlegend=False), row=2, col=1)
+            fig_bode.add_trace(go.Scatter(x=omega_u.flatten(), y=mag_u_db, mode='lines', line=dict(color='red', dash='dot'), name='Malha Original'), row=1, col=1)
+            fig_bode.add_trace(go.Scatter(x=omega_u.flatten(), y=phase_u_deg, mode='lines', line=dict(color='red', dash='dot'), showlegend=False), row=2, col=1)
         else:
-            # Se não há compensador, desenha APENAS a curva Vermelha
             fig_bode = bode(sys_ma_uncomp, w=w)
             if len(fig_bode.data) >= 2:
                 fig_bode.data[0].line.color = 'red'
-                fig_bode.data[0].name = 'Sem Compensador'
+                fig_bode.data[0].name = 'Malha Original'
                 fig_bode.data[0].showlegend = True
                 fig_bode.data[1].line.color = 'red'
                 fig_bode.data[1].showlegend = False
 
+        if mostrar_marcadores:
+            if usar_compensador:
+                zeros_c = np.roots(simulador.num_L)
+                polos_c = np.roots(simulador.den_L)
+                freq_zeros_c = np.unique(np.abs(zeros_c[zeros_c != 0]))
+                freq_polos_c = np.unique(np.abs(polos_c[polos_c != 0]))
 
-        # ==========================================================
-        # 2. MARCADORES 'X' e 'O' NA LINHA DO GRÁFICO (POLOS E ZEROS)
-        # ==========================================================
-        
-        # --- RAÍZES: COM COMPENSADOR (VERDE) ---
-        if usar_compensador:
-            zeros_c = np.roots(simulador.num_L)
-            polos_c = np.roots(simulador.den_L)
-            freq_zeros_c = np.unique(np.abs(zeros_c[zeros_c != 0]))
-            freq_polos_c = np.unique(np.abs(polos_c[polos_c != 0]))
+                if len(freq_polos_c) > 0:
+                    mag_p, phase_p, _ = ctl.bode(sys_ma_comp, freq_polos_c, plot=False)
+                    mag_p_db = 20 * np.log10(mag_p.flatten())
+                    phase_p_deg = np.degrees(phase_p.flatten())
+                    texto_polos = [f"Polo (Malha Compensada)<br>Frequência: {wp:.3f} rad/s<br>Magnitude: {mp:.1f} dB<br>Fase: {fp:.1f}°" for wp, mp, fp in zip(freq_polos_c, mag_p_db, phase_p_deg)]
+                    
+                    fig_bode.add_trace(go.Scatter(
+                        x=freq_polos_c, y=mag_p_db, mode='markers',
+                        marker=dict(symbol='x', color='green', size=10, line=dict(width=2)),
+                        hoverinfo='text', hovertext=texto_polos, showlegend=False
+                    ), row=1, col=1)
+                    
+                    fig_bode.add_trace(go.Scatter(
+                        x=freq_polos_c, y=phase_p_deg, mode='markers',
+                        marker=dict(symbol='x', color='green', size=10, line=dict(width=2)),
+                        hoverinfo='text', hovertext=texto_polos, showlegend=False
+                    ), row=2, col=1)
 
-            if len(freq_polos_c) > 0:
-                mag_p, phase_p, _ = ctl.bode(sys_ma_comp, freq_polos_c, plot=False)
-                mag_p_db = 20 * np.log10(mag_p.flatten())
-                phase_p_deg = np.degrees(phase_p.flatten())
-                texto_polos = [f"Polo (Com Comp)<br>Frequência: {wp:.3f} rad/s<br>Magnitude: {mp:.1f} dB<br>Fase: {fp:.1f}°" for wp, mp, fp in zip(freq_polos_c, mag_p_db, phase_p_deg)]
+                if len(freq_zeros_c) > 0:
+                    mag_z, phase_z, _ = ctl.bode(sys_ma_comp, freq_zeros_c, plot=False)
+                    mag_z_db = 20 * np.log10(mag_z.flatten())
+                    phase_z_deg = np.degrees(phase_z.flatten())
+                    texto_zeros = [f"Zero (Malha Compensada)<br>Frequência: {wz:.3f} rad/s<br>Magnitude: {mz:.1f} dB<br>Fase: {fz:.1f}°" for wz, mz, fz in zip(freq_zeros_c, mag_z_db, phase_z_deg)]
+                    
+                    fig_bode.add_trace(go.Scatter(
+                        x=freq_zeros_c, y=mag_z_db, mode='markers',
+                        marker=dict(symbol='circle-open', color='green', size=10, line=dict(width=3)),
+                        hoverinfo='text', hovertext=texto_zeros, showlegend=False
+                    ), row=1, col=1)
+                    
+                    fig_bode.add_trace(go.Scatter(
+                        x=freq_zeros_c, y=phase_z_deg, mode='markers',
+                        marker=dict(symbol='circle-open', color='green', size=10, line=dict(width=3)),
+                        hoverinfo='text', hovertext=texto_zeros, showlegend=False
+                    ), row=2, col=1)
+
+            zeros_u = np.roots(sim_sem_comp.num_L)
+            polos_u = np.roots(sim_sem_comp.den_L)
+            freq_zeros_u = np.unique(np.abs(zeros_u[zeros_u != 0]))
+            freq_polos_u = np.unique(np.abs(polos_u[polos_u != 0]))
+
+            if len(freq_polos_u) > 0:
+                mag_p_u, phase_p_u, _ = ctl.bode(sys_ma_uncomp, freq_polos_u, plot=False)
+                mag_p_u_db = 20 * np.log10(mag_p_u.flatten())
+                phase_p_u_deg = np.degrees(phase_p_u.flatten())
+                texto_polos_u = [f"Polo (Malha Original)<br>Frequência: {wp:.3f} rad/s<br>Magnitude: {mp:.1f} dB<br>Fase: {fp:.1f}°" for wp, mp, fp in zip(freq_polos_u, mag_p_u_db, phase_p_u_deg)]
                 
                 fig_bode.add_trace(go.Scatter(
-                    x=freq_polos_c, y=mag_p_db, mode='markers',
-                    marker=dict(symbol='x', color='green', size=10, line=dict(width=2)),
-                    hoverinfo='text', hovertext=texto_polos, showlegend=True, name="Polos (Com Comp)"
+                    x=freq_polos_u, y=mag_p_u_db, mode='markers',
+                    marker=dict(symbol='x', color='red', size=10, line=dict(width=2)),
+                    hoverinfo='text', hovertext=texto_polos_u, showlegend=False
                 ), row=1, col=1)
                 
                 fig_bode.add_trace(go.Scatter(
-                    x=freq_polos_c, y=phase_p_deg, mode='markers',
-                    marker=dict(symbol='x', color='green', size=10, line=dict(width=2)),
-                    hoverinfo='text', hovertext=texto_polos, showlegend=False
+                    x=freq_polos_u, y=phase_p_u_deg, mode='markers',
+                    marker=dict(symbol='x', color='red', size=10, line=dict(width=2)),
+                    hoverinfo='text', hovertext=texto_polos_u, showlegend=False
                 ), row=2, col=1)
 
-            if len(freq_zeros_c) > 0:
-                mag_z, phase_z, _ = ctl.bode(sys_ma_comp, freq_zeros_c, plot=False)
-                mag_z_db = 20 * np.log10(mag_z.flatten())
-                phase_z_deg = np.degrees(phase_z.flatten())
-                texto_zeros = [f"Zero (Com Comp)<br>Frequência: {wz:.3f} rad/s<br>Magnitude: {mz:.1f} dB<br>Fase: {fz:.1f}°" for wz, mz, fz in zip(freq_zeros_c, mag_z_db, phase_z_deg)]
+            if len(freq_zeros_u) > 0:
+                mag_z_u, phase_z_u, _ = ctl.bode(sys_ma_uncomp, freq_zeros_u, plot=False)
+                mag_z_u_db = 20 * np.log10(mag_z_u.flatten())
+                phase_z_u_deg = np.degrees(phase_z_u.flatten())
+                texto_zeros_u = [f"Zero (Malha Original)<br>Frequência: {wz:.3f} rad/s<br>Magnitude: {mz:.1f} dB<br>Fase: {fz:.1f}°" for wz, mz, fz in zip(freq_zeros_u, mag_z_u_db, phase_z_u_deg)]
                 
                 fig_bode.add_trace(go.Scatter(
-                    x=freq_zeros_c, y=mag_z_db, mode='markers',
-                    marker=dict(symbol='circle-open', color='green', size=10, line=dict(width=3)),
-                    hoverinfo='text', hovertext=texto_zeros, showlegend=True, name="Zeros (Com Comp)"
+                    x=freq_zeros_u, y=mag_z_u_db, mode='markers',
+                    marker=dict(symbol='circle-open', color='red', size=10, line=dict(width=3)),
+                    hoverinfo='text', hovertext=texto_zeros_u, showlegend=False
                 ), row=1, col=1)
                 
                 fig_bode.add_trace(go.Scatter(
-                    x=freq_zeros_c, y=phase_z_deg, mode='markers',
-                    marker=dict(symbol='circle-open', color='green', size=10, line=dict(width=3)),
-                    hoverinfo='text', hovertext=texto_zeros, showlegend=False
+                    x=freq_zeros_u, y=phase_z_u_deg, mode='markers',
+                    marker=dict(symbol='circle-open', color='red', size=10, line=dict(width=3)),
+                    hoverinfo='text', hovertext=texto_zeros_u, showlegend=False
                 ), row=2, col=1)
 
-        # --- RAÍZES: SEM COMPENSADOR (VERMELHO) ---
-        zeros_u = np.roots(sim_sem_comp.num_L)
-        polos_u = np.roots(sim_sem_comp.den_L)
-        freq_zeros_u = np.unique(np.abs(zeros_u[zeros_u != 0]))
-        freq_polos_u = np.unique(np.abs(polos_u[polos_u != 0]))
+            _, pm_c, _, wp_c = ctl.margin(sys_ma_comp)
+            _, pm_u, _, wp_u = ctl.margin(sys_ma_uncomp)
+            
+            if not np.isnan(wp_u) and not np.isinf(wp_u) and wp_u > 0:
+                fase_u = pm_u - 180.0
+                texto_hover_u = f"<b>ωc (Malha Original)</b><br>Frequência: {wp_u:.3f} rad/s<br>Magnitude: 0.0 dB<br>Fase: {fase_u:.1f}°"
+                
+                fig_bode.add_trace(go.Scatter(
+                    x=[wp_u], y=[0], mode='markers',
+                    marker=dict(color='red', size=12, symbol='diamond', line=dict(color='white', width=2)),
+                    hoverinfo='text', hovertext=texto_hover_u, showlegend=False
+                ), row=1, col=1)
+                
+                fig_bode.add_trace(go.Scatter(
+                    x=[wp_u], y=[fase_u], mode='markers',
+                    marker=dict(color='red', size=12, symbol='diamond', line=dict(color='white', width=2)),
+                    hoverinfo='text', hovertext=texto_hover_u, showlegend=False
+                ), row=2, col=1)
+                
+            if usar_compensador and not np.isnan(wp_c) and not np.isinf(wp_c) and wp_c > 0:
+                fase_c = pm_c - 180.0
+                texto_hover_c = f"<b>ωc (Malha Compensada)</b><br>Frequência: {wp_c:.3f} rad/s<br>Magnitude: 0.0 dB<br>Fase: {fase_c:.1f}°"
+                
+                fig_bode.add_trace(go.Scatter(
+                    x=[wp_c], y=[0], mode='markers',
+                    marker=dict(color='green', size=12, symbol='diamond', line=dict(color='white', width=2)),
+                    hoverinfo='text', hovertext=texto_hover_c, showlegend=False
+                ), row=1, col=1)
+                
+                fig_bode.add_trace(go.Scatter(
+                    x=[wp_c], y=[fase_c], mode='markers',
+                    marker=dict(color='green', size=12, symbol='diamond', line=dict(color='white', width=2)),
+                    hoverinfo='text', hovertext=texto_hover_c, showlegend=False
+                ), row=2, col=1)
 
-        if len(freq_polos_u) > 0:
-            mag_p_u, phase_p_u, _ = ctl.bode(sys_ma_uncomp, freq_polos_u, plot=False)
-            mag_p_u_db = 20 * np.log10(mag_p_u.flatten())
-            phase_p_u_deg = np.degrees(phase_p_u.flatten())
-            texto_polos_u = [f"Polo (Sem Comp)<br>Frequência: {wp:.3f} rad/s<br>Magnitude: {mp:.1f} dB<br>Fase: {fp:.1f}°" for wp, mp, fp in zip(freq_polos_u, mag_p_u_db, phase_p_u_deg)]
-            
-            fig_bode.add_trace(go.Scatter(
-                x=freq_polos_u, y=mag_p_u_db, mode='markers',
-                marker=dict(symbol='x', color='red', size=10, line=dict(width=2)),
-                hoverinfo='text', hovertext=texto_polos_u, showlegend=True, name="Polos (Sem Comp)"
-            ), row=1, col=1)
-            
-            fig_bode.add_trace(go.Scatter(
-                x=freq_polos_u, y=phase_p_u_deg, mode='markers',
-                marker=dict(symbol='x', color='red', size=10, line=dict(width=2)),
-                hoverinfo='text', hovertext=texto_polos_u, showlegend=False
-            ), row=2, col=1)
-
-        if len(freq_zeros_u) > 0:
-            mag_z_u, phase_z_u, _ = ctl.bode(sys_ma_uncomp, freq_zeros_u, plot=False)
-            mag_z_u_db = 20 * np.log10(mag_z_u.flatten())
-            phase_z_u_deg = np.degrees(phase_z_u.flatten())
-            texto_zeros_u = [f"Zero (Sem Comp)<br>Frequência: {wz:.3f} rad/s<br>Magnitude: {mz:.1f} dB<br>Fase: {fz:.1f}°" for wz, mz, fz in zip(freq_zeros_u, mag_z_u_db, phase_z_u_deg)]
-            
-            fig_bode.add_trace(go.Scatter(
-                x=freq_zeros_u, y=mag_z_u_db, mode='markers',
-                marker=dict(symbol='circle-open', color='red', size=10, line=dict(width=3)),
-                hoverinfo='text', hovertext=texto_zeros_u, showlegend=True, name="Zeros (Sem Comp)"
-            ), row=1, col=1)
-            
-            fig_bode.add_trace(go.Scatter(
-                x=freq_zeros_u, y=phase_z_u_deg, mode='markers',
-                marker=dict(symbol='circle-open', color='red', size=10, line=dict(width=3)),
-                hoverinfo='text', hovertext=texto_zeros_u, showlegend=False
-            ), row=2, col=1)
-
-        # ==========================================================
-        # 3. FREQUÊNCIAS DE CRUZAMENTO (0 dB) E MARCADORES INTERATIVOS
-        # ==========================================================
-        _, pm_c, _, wp_c = ctl.margin(sys_ma_comp)
-        _, pm_u, _, wp_u = ctl.margin(sys_ma_uncomp)
-        
-        # Lógica para o sistema Sem Compensador (Vermelho) - LOSANGO
-        if not np.isnan(wp_u) and not np.isinf(wp_u) and wp_u > 0:
-            fase_u = pm_u - 180.0
-            texto_hover_u = f"<b>Crossover (Sem Comp)</b><br>Frequência: {wp_u:.3f} rad/s<br>Magnitude: 0.0 dB<br>Fase: {fase_u:.1f}°"
-            
-            fig_bode.add_trace(go.Scatter(
-                x=[wp_u], y=[0], mode='markers',
-                marker=dict(color='red', size=12, symbol='diamond', line=dict(color='white', width=2)),
-                hoverinfo='text', hovertext=texto_hover_u, showlegend=True, name="0 dB (Sem Comp)"
-            ), row=1, col=1)
-            
-            fig_bode.add_trace(go.Scatter(
-                x=[wp_u], y=[fase_u], mode='markers',
-                marker=dict(color='red', size=12, symbol='diamond', line=dict(color='white', width=2)),
-                hoverinfo='text', hovertext=texto_hover_u, showlegend=False
-            ), row=2, col=1)
-            
-        # Lógica para o sistema Com Compensador (Verde) - LOSANGO (Apenas se ativo)
-        if usar_compensador and not np.isnan(wp_c) and not np.isinf(wp_c) and wp_c > 0:
-            fase_c = pm_c - 180.0
-            texto_hover_c = f"<b>Crossover (Com Comp)</b><br>Frequência: {wp_c:.3f} rad/s<br>Magnitude: 0.0 dB<br>Fase: {fase_c:.1f}°"
-            
-            fig_bode.add_trace(go.Scatter(
-                x=[wp_c], y=[0], mode='markers',
-                marker=dict(color='green', size=12, symbol='diamond', line=dict(color='white', width=2)),
-                hoverinfo='text', hovertext=texto_hover_c, showlegend=True, name="0 dB (Com Comp)"
-            ), row=1, col=1)
-            
-            fig_bode.add_trace(go.Scatter(
-                x=[wp_c], y=[fase_c], mode='markers',
-                marker=dict(color='green', size=12, symbol='diamond', line=dict(color='white', width=2)),
-                hoverinfo='text', hovertext=texto_hover_c, showlegend=False
-            ), row=2, col=1)
-
-        # Configura o layout, atualiza os eixos para 10^x e posiciona a legenda estrategicamente
         fig_bode.update_xaxes(type='log', exponentformat='power', row='all', col=1)
         fig_bode.update_layout(
-            height=400, 
-            margin=dict(l=0, r=0, t=30, b=0), 
+            height=370, 
+            margin=dict(l=0, r=0, t=10, b=0), 
             legend=dict(
                 orientation="h", y=-0.2, x=0.5, xanchor="center", 
                 itemclick="toggle", itemdoubleclick="toggleothers"
             ),
             hovermode='closest'
         )
-        st.plotly_chart(fig_bode, use_container_width=True, key="grafico_bode")
+        
+        # Aqui é onde enviamos o gráfico pronto para dentro da "caixa" (container) 
+        # que criamos lá em cima, antes do botão!
+        bode_container.plotly_chart(fig_bode, use_container_width=True, key="grafico_bode")
 
     st.divider()
-    # Executa o painel de análise embutido localmente
     renderizar_painel_analise(simulador, t_step, y_step)
     st.divider()
 
-    # Bloco Inferior: Esforço U(s) e Lugar das Raízes (LGR)
     col3, col4 = st.columns(2)
     with col3:
         st.subheader("Esforço de Controle U(s)")
@@ -294,13 +279,11 @@ def renderizar_aba_principal(simulador, t_step, y_step, aplicar_empurrao, t_empu
         fig_rl.add_vline(x=0, line_dash="dash", line_color="white", opacity=0.4)
         fig_rl.add_hline(y=0, line_dash="dash", line_color="white", opacity=0.4)
         
-        # Calcula a "bounding box" apenas nos polos/zeros de interesse
         pontos_interesse = np.concatenate((zeros_ma, polos_ma, polos_atuais))
         if len(pontos_interesse) > 0:
             x_min, x_max = np.min(np.real(pontos_interesse)), np.max(np.real(pontos_interesse))
             y_max_abs = np.max(np.abs(np.imag(pontos_interesse)))
             
-            # Adiciona pequenas margens
             margem_x = max(x_max - x_min, 1.0) * 0.4
             margem_y = max(y_max_abs, 1.0) * 1.5
             
@@ -313,12 +296,11 @@ def renderizar_aba_principal(simulador, t_step, y_step, aplicar_empurrao, t_empu
 
     st.divider()
     
-    # Simulação Dinâmica da Trajetória Real na Pista
     st.subheader("Simulação de Trajetória")
     t_sim = np.linspace(0, 20, 600)
     velocidade_frente = 1.0  
     deslocamento_x = velocidade_frente * t_sim
-    referencia_pista, y_total = simulador.simular_pista(t_sim, aplicar_empurrao, t_empurrao, forca_empurrao)
+    referencia_pista, y_total = simulador.simular_pista(t_sim, aplicar_empurrao, t_empurrao, forca_empurrao, aplicar_constante, t_constante, forca_constante)
 
     step_anim = 4
     x_anim = deslocamento_x[::step_anim]
@@ -326,7 +308,7 @@ def renderizar_aba_principal(simulador, t_step, y_step, aplicar_empurrao, t_empu
 
     comp_desligado = CompensadorAvancoAtraso(ativo_av=False, ativo_at=False, Kc=1.0)
     sim_sem_comp = SimuladorControle(planta, comp_desligado)
-    _, y_total_sem_comp = sim_sem_comp.simular_pista(t_sim, aplicar_empurrao, t_empurrao, forca_empurrao)
+    _, y_total_sem_comp = sim_sem_comp.simular_pista(t_sim, aplicar_empurrao, t_empurrao, forca_empurrao, aplicar_constante, t_constante, forca_constante)
     y_anim_sem_comp = y_total_sem_comp[::step_anim]
 
     usar_compensador = ativar_avanco or ativar_atraso
@@ -335,10 +317,10 @@ def renderizar_aba_principal(simulador, t_step, y_step, aplicar_empurrao, t_empu
 
     tab_graficos, tab_carro = st.tabs(["Simulação gráfica", "Demonstração (Carro)"])
     with tab_graficos:
-        fig_pista = criar_animacao_classica(deslocamento_x, referencia_pista, x_anim, y_anim, y_anim_sem_comp, usar_compensador, aplicar_empurrao, t_empurrao, forca_empurrao, velocidade_frente)
+        fig_pista = criar_animacao_classica(deslocamento_x, referencia_pista, x_anim, y_anim, y_anim_sem_comp, usar_compensador, aplicar_empurrao, t_empurrao, forca_empurrao, aplicar_constante, t_constante, velocidade_frente)
         st.plotly_chart(fig_pista, use_container_width=True, key="grafico_pista_classico")
     with tab_carro:
-        fig_carro = criar_animacao_carro(deslocamento_x, referencia_pista, x_anim, y_anim_carro, angulos_plotly, aplicar_empurrao, t_empurrao, forca_empurrao, velocidade_frente)
+        fig_carro = criar_animacao_carro(deslocamento_x, referencia_pista, x_anim, y_anim_carro, angulos_plotly, aplicar_empurrao, t_empurrao, forca_empurrao, aplicar_constante, t_constante, velocidade_frente)
         st.plotly_chart(fig_carro, use_container_width=True, key="grafico_skin_carro")
 
 
