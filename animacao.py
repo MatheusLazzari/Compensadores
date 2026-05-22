@@ -78,7 +78,10 @@ def criar_animacao_classica(deslocamento_x, referencia_pista, x_anim, y_anim_com
         xaxis=dict(range=[0, max(deslocamento_x)], title="Deslocamento Longitudinal (m)"),
         yaxis=dict(range=[-4, 4], title="Deslocamento Lateral (m)"),
         height=450, margin=dict(l=0, r=0, t=30, b=0),
-        updatemenus=[dict(type="buttons", direction="left", showactive=True, x=0.0, y=1.15, xanchor="left", buttons=botoes_menu)]
+        updatemenus=[dict(
+            type="buttons", direction="left", showactive=False, x=0.0, y=1.15, xanchor="left", buttons=botoes_menu,
+            bgcolor="rgba(45, 45, 45, 0.8)", font=dict(color="white")
+        )]
     )
     return fig
 
@@ -158,6 +161,7 @@ def criar_animacao_carro(deslocamento_x, referencia_pista, x_anim, y_anim, angul
         height=450, margin=dict(l=0, r=0, t=30, b=0), showlegend=False, plot_bgcolor='#509e4a', 
         updatemenus=[dict(
             type="buttons", direction="left", showactive=False, x=0.0, y=1.15, xanchor="left",
+            bgcolor="rgba(45, 45, 45, 0.8)", font=dict(color="white"),
             buttons=[
                 dict(label="Iniciar", method="animate", args=[None, {"frame": {"duration": 40, "redraw": False}, "fromcurrent": True}]),
                 dict(label="Pausar", method="animate", args=[[None], {"frame": {"duration": 0, "redraw": False}, "mode": "immediate"}])
