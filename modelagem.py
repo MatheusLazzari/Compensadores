@@ -37,18 +37,14 @@ class CompensadorAvancoAtraso:
     @property
     def tf_coefs(self):
         """Calcula por convolução os coeficientes finais da Transfer Function do Controlador C(s)"""
-        # Malha de Avanço (Lead): Se desligada, assume comportamento neutro (1.0)
         num_av = [1, self.z_av] if self.ativo_av else [1.0]
         den_av = [1, self.p_av] if self.ativo_av else [1.0]
         
-        # Malha de Atraso (Lag): Se desligada, assume comportamento neutro (1.0)
         num_at = [1, self.z_at] if self.ativo_at else [1.0]
         den_at = [1, self.p_at] if self.ativo_at else [1.0]
         
-        # CORREÇÃO: Se ambas as malhas estiverem desligadas, ignora o Kc (ganho = 1.0)
         ganho_efetivo = self.Kc if (self.ativo_av or self.ativo_at) else 1.0
         
-        # Convolução polinomial combinando as duas partes sob o ganho efetivo
         num_c = ganho_efetivo * np.convolve(num_av, num_at)
         den_c = np.convolve(den_av, den_at)
         return num_c, den_c
@@ -69,25 +65,21 @@ class SimuladorControle:
         num_p, den_p = self.planta.tf_coefs
         num_c, den_c = self.compensador.tf_coefs
 
-        # Malha Aberta: L(s) = C(s) * G(s)
         self.num_L = np.convolve(num_c, num_p)
         self.den_L = np.convolve(den_c, den_p)
         self.sys_ma = signal.TransferFunction(self.num_L, self.den_L)
 
-        # Malha Fechada: T(s) = L(s) / (1 + L(s))
         pad_len = max(len(self.num_L), len(self.den_L))
         num_L_padded = np.pad(self.num_L, (pad_len - len(self.num_L), 0), 'constant')
         den_L_padded = np.pad(self.den_L, (pad_len - len(self.den_L), 0), 'constant')
         self.den_T = num_L_padded + den_L_padded
         self.sys_mf = signal.TransferFunction(self.num_L, self.den_T)
 
-        # Rejeição de Distúrbio: Td(s) = G(s) / (1 + C(s)G(s))
         num_Td = np.convolve(num_p, den_c)
         self.sys_disturbio = signal.TransferFunction(num_Td, self.den_T)
 
     def simular_resposta_degrau(self):
         """Simula a curva clássica de resposta ao degrau unitário com tempo dinâmico."""
-        # A omissão do vetor 'T' faz o scipy.signal calcular o tempo ideal automaticamente
         t_step, y_step = signal.step(self.sys_mf)
         return t_step, y_step
 
@@ -98,19 +90,23 @@ class SimuladorControle:
         num_Tu = np.convolve(num_c, den_p)
         sys_esforco = signal.TransferFunction(num_Tu, self.den_T)
         
-        # A omissão do vetor 'T' permite a escala automática do tempo
         t_step, y_step = signal.step(sys_esforco)
         return t_step, y_step
 
-    def simular_pista(self, t_sim, aplicar_empurrao, t_empurrao, forca_empurrao):
-        """Gera o cenário de pista sinoidal integrado à perturbação externa pontual."""
+    def simular_pista(self, t_sim, aplicar_empurrao, t_empurrao, forca_empurrao, aplicar_constante, t_constante, forca_constante):
+        """Gera o cenário de pista sinoidal integrado às perturbações externas."""
         referencia_pista = 1.5 * np.sin(0.5 * t_sim)
         sinal_disturbio = np.zeros_like(t_sim)
         
         if aplicar_empurrao:
             idx_start = np.searchsorted(t_sim, t_empurrao)
             idx_end = np.searchsorted(t_sim, t_empurrao + 0.3)  # Duração fixa do pulso (0.3s)
-            sinal_disturbio[idx_start:idx_end] = forca_empurrao
+            sinal_disturbio[idx_start:idx_end] += forca_empurrao
+            
+        if aplicar_constante:
+            idx_start = np.searchsorted(t_sim, t_constante[0])
+            idx_end = np.searchsorted(t_sim, t_constante[1])
+            sinal_disturbio[idx_start:idx_end] += forca_constante
 
         _, y_rastreamento, _ = signal.lsim(self.sys_mf, referencia_pista, t_sim)
         _, y_rejeicao, _ = signal.lsim(self.sys_disturbio, sinal_disturbio, t_sim)
@@ -135,7 +131,6 @@ def calcular_lgr_continuo(num, den, K_vals):
         eq_char = den_pad + k * num_pad
         raizes_atuais = np.roots(eq_char)
         
-        # Algoritmo de proximidade geométrica para evitar saltos cruzados de ramos no gráfico
         if i > 0:
             raizes_ordenadas = []
             raizes_disponiveis = list(raizes_atuais)
