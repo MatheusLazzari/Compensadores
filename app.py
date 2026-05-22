@@ -12,7 +12,8 @@ st.set_page_config(page_title="Seguidor de Linha", layout="wide")
 valores_padrao = {
     "ativar_avanco": True, "ativar_atraso": True, "m": 1.0, "b": 1.0, "K": 1.0,
     "Kc": 25.0, "z_av": 1.0, "p_av": 10.0, "z_at": 0.5, "p_at": 0.05,
-    "t_empurrao": 5.0, "forca_empurrao": 10.0
+    "t_empurrao": 5.0, "forca_empurrao": 10.0,
+    "t_constante": (8.0, 14.0), "forca_constante": 5.0
 }
 for chave, val in valores_padrao.items():
     if chave not in st.session_state:
@@ -30,7 +31,6 @@ st.sidebar.markdown("---")
 st.sidebar.header("Parâmetros da Planta")
 st.sidebar.latex(r"G(s) = \frac{K}{m\cdot s^2 + b\cdot s}")
 
-# Variáveis da planta (0 a 1000)
 if usar_escrita:
     m = st.sidebar.number_input("Massa (m)", min_value=0.1, max_value=1000.0, value=float(st.session_state["m"]), step=1.0)
     b = st.sidebar.number_input("Atrito Viscoso (b)", min_value=0.0, max_value=1000.0, value=float(st.session_state["b"]), step=1.0)
@@ -60,7 +60,6 @@ if st.sidebar.button("Calcular compensador ótimo", use_container_width=True):
 ativar_avanco = st.sidebar.checkbox("Ativar Malha de Avanço", key="ativar_avanco")
 ativar_atraso = st.sidebar.checkbox("Ativar Malha de Atraso", key="ativar_atraso")
 
-# Lógica UX: Desabilita o slider do Kc se ambos os compensadores estiverem desmarcados
 compensadores_ativos = ativar_avanco or ativar_atraso
 
 if usar_escrita:
@@ -87,7 +86,6 @@ if at := ativar_atraso:
     st.session_state["z_at"], st.session_state["p_at"] = z_at, p_at
 
 st.sidebar.markdown("---")
-# Atualização Dinâmica do C(s) exibido
 if ac and at: 
     st.sidebar.latex(r"C(s) = K_c \frac{(s+z_{av})(s+z_{at})}{(s+p_{av})(s+p_{at})}")
 elif ac: 
@@ -95,16 +93,39 @@ elif ac:
 elif at: 
     st.sidebar.latex(r"C(s) = K_c \frac{s+z_{at}}{s+p_{at}}")
 else:
-    # Mostra C(s) = 1 quando estiver desativado
     st.sidebar.latex(r"C(s) = 1")
     st.sidebar.info("Sistema operando sem compensação (Malha original).")
 
-# Valores de Empurrão (-1000 a 1000)
-st.sidebar.header("Perturbação (Empurrão)")
-aplicar_empurrao = st.sidebar.checkbox("Ativar Empurrão", value=False)
-t_empurrao = st.sidebar.number_input("Instante do Empurrão (s)", min_value=2.0, max_value=18.0, value=float(st.session_state["t_empurrao"])) if usar_escrita else st.sidebar.slider("Instante do Empurrão (s)", min_value=2.0, max_value=18.0, value=float(st.session_state["t_empurrao"]))
-forca_empurrao = st.sidebar.number_input("Força do Empurrão", min_value=-1000.0, max_value=1000.0, value=float(st.session_state["forca_empurrao"]), step=1.0) if usar_escrita else st.sidebar.slider("Força do Empurrão", min_value=-1000.0, max_value=1000.0, value=float(st.session_state["forca_empurrao"]), step=1.0)
-st.session_state["t_empurrao"], st.session_state["forca_empurrao"] = t_empurrao, forca_empurrao
+st.sidebar.header("Perturbações Externas")
+
+aplicar_empurrao = st.sidebar.checkbox("Ativar Empurrão Rápido", value=False)
+if aplicar_empurrao:
+    t_empurrao = st.sidebar.number_input("Instante do Empurrão (s)", min_value=2.0, max_value=18.0, value=float(st.session_state["t_empurrao"])) if usar_escrita else st.sidebar.slider("Instante do Empurrão (s)", min_value=2.0, max_value=18.0, value=float(st.session_state["t_empurrao"]))
+    forca_empurrao = st.sidebar.number_input("Força do Empurrão", min_value=-1000.0, max_value=1000.0, value=float(st.session_state["forca_empurrao"]), step=1.0) if usar_escrita else st.sidebar.slider("Força do Empurrão", min_value=-1000.0, max_value=1000.0, value=float(st.session_state["forca_empurrao"]), step=1.0)
+    st.session_state["t_empurrao"], st.session_state["forca_empurrao"] = t_empurrao, forca_empurrao
+else:
+    t_empurrao, forca_empurrao = st.session_state["t_empurrao"], st.session_state["forca_empurrao"]
+
+aplicar_constante = st.sidebar.checkbox("Ativar Força Contínua (Vento/Declive)", value=False)
+if aplicar_constante:
+    if usar_escrita:
+        colA, colB = st.sidebar.columns(2)
+        tc_start = colA.number_input("Início (s)", min_value=0.0, max_value=20.0, value=float(st.session_state["t_constante"][0]))
+        tc_end = colB.number_input("Fim (s)", min_value=0.0, max_value=20.0, value=float(st.session_state["t_constante"][1]))
+        t_constante = (tc_start, tc_end)
+    else:
+        t_constante = st.sidebar.slider("Intervalo de Duração (s)", min_value=0.0, max_value=20.0, value=st.session_state["t_constante"])
+        
+    forca_constante = st.sidebar.number_input("Força Contínua", min_value=-1000.0, max_value=1000.0, value=float(st.session_state["forca_constante"]), step=1.0) if usar_escrita else st.sidebar.slider("Força Contínua", min_value=-1000.0, max_value=1000.0, value=float(st.session_state["forca_constante"]), step=1.0)
+    st.session_state["t_constante"], st.session_state["forca_constante"] = t_constante, forca_constante
+    
+    # Aviso didático sobre o retorno lento à estabilidade
+    st.sidebar.warning("Aviso: O retorno lento para estabilidade acontece porque a perturbação enxerga o polo que foi cancelado matematicamente pelo controlador!")
+    with st.sidebar.expander("O que é esse cancelamento?"):
+        st.write("O controlador Avanço-Atraso anula a inércia lenta do carrinho inserindo um 'zero' em cima do 'polo' original. Isso deixa a resposta à referência muito rápida.")
+        st.write("No entanto, o vento atinge o carrinho fisicamente *depois* do controlador. A dinâmica lenta original da planta ainda está lá e, como o controlador foi sintonizado para 'ignorá-la', ele demora a rejeitar a perturbação externa.")
+else:
+    t_constante, forca_constante = st.session_state["t_constante"], st.session_state["forca_constante"]
 
 planta = RoboPlanta(m, b, K)
 compensador = CompensadorAvancoAtraso(ativo_av=ativar_avanco, ativo_at=ativar_atraso, Kc=Kc, z_av=z_av, p_av=p_av, z_at=z_at, p_at=p_at)
@@ -118,7 +139,7 @@ t_step, y_step = simulador.simular_resposta_degrau()
 tab_principal, tab_calculo, tab_guia = st.tabs(["Principal", "Cálculo Passo a Passo", "Guia"])
 
 with tab_principal:
-    renderizar_aba_principal(simulador, t_step, y_step, aplicar_empurrao, t_empurrao, forca_empurrao, ativar_avanco, ativar_atraso, planta)
+    renderizar_aba_principal(simulador, t_step, y_step, aplicar_empurrao, t_empurrao, forca_empurrao, aplicar_constante, t_constante, forca_constante, ativar_avanco, ativar_atraso, planta)
 
 with tab_calculo:
     renderizar_aba_calculo(m, b, K)
