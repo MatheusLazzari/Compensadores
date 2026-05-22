@@ -13,7 +13,11 @@ valores_padrao = {
     "ativar_avanco": True, "ativar_atraso": True, "m": 1.0, "b": 1.0, "K": 1.0,
     "Kc": 25.0, "z_av": 1.0, "p_av": 10.0, "z_at": 0.5, "p_at": 0.05,
     "t_empurrao": 5.0, "forca_empurrao": 10.0,
-    "t_constante": (8.0, 14.0), "forca_constante": 5.0
+    "t_constante": (8.0, 14.0), "forca_constante": 5.0,
+    "usar_escrita": False,
+    "aplicar_empurrao": False,
+    "aplicar_constante": False,
+    "mostrar_marcadores": False
 }
 for chave, val in valores_padrao.items():
     if chave not in st.session_state:
@@ -25,7 +29,7 @@ st.title("Controle do Seguidor de Linha")
 # CONSTRUÇÃO DA INTERFACE DA SIDEBAR (PAINEL LATERAL)
 # =====================================================================
 st.sidebar.header("Configurações de Entrada")
-usar_escrita = st.sidebar.toggle("Inserir valores manualmente", value=False)
+usar_escrita = st.sidebar.toggle("Inserir valores manualmente", key="usar_escrita")
 
 st.sidebar.markdown("---")
 st.sidebar.header("Parâmetros da Planta")
@@ -98,7 +102,7 @@ else:
 
 st.sidebar.header("Perturbações Externas")
 
-aplicar_empurrao = st.sidebar.checkbox("Ativar Empurrão Rápido", value=False)
+aplicar_empurrao = st.sidebar.checkbox("Ativar Empurrão Rápido", key="aplicar_empurrao")
 if aplicar_empurrao:
     t_empurrao = st.sidebar.number_input("Instante do Empurrão (s)", min_value=2.0, max_value=18.0, value=float(st.session_state["t_empurrao"])) if usar_escrita else st.sidebar.slider("Instante do Empurrão (s)", min_value=2.0, max_value=18.0, value=float(st.session_state["t_empurrao"]))
     forca_empurrao = st.sidebar.number_input("Força do Empurrão", min_value=-1000.0, max_value=1000.0, value=float(st.session_state["forca_empurrao"]), step=1.0) if usar_escrita else st.sidebar.slider("Força do Empurrão", min_value=-1000.0, max_value=1000.0, value=float(st.session_state["forca_empurrao"]), step=1.0)
@@ -106,7 +110,7 @@ if aplicar_empurrao:
 else:
     t_empurrao, forca_empurrao = st.session_state["t_empurrao"], st.session_state["forca_empurrao"]
 
-aplicar_constante = st.sidebar.checkbox("Ativar Força Contínua (Vento/Declive)", value=False)
+aplicar_constante = st.sidebar.checkbox("Ativar Força Contínua (Vento/Declive)", key="aplicar_constante")
 if aplicar_constante:
     if usar_escrita:
         colA, colB = st.sidebar.columns(2)
@@ -119,7 +123,6 @@ if aplicar_constante:
     forca_constante = st.sidebar.number_input("Força Contínua", min_value=-1000.0, max_value=1000.0, value=float(st.session_state["forca_constante"]), step=1.0) if usar_escrita else st.sidebar.slider("Força Contínua", min_value=-1000.0, max_value=1000.0, value=float(st.session_state["forca_constante"]), step=1.0)
     st.session_state["t_constante"], st.session_state["forca_constante"] = t_constante, forca_constante
     
-    # Aviso didático sobre o retorno lento à estabilidade
     st.sidebar.warning("Aviso: O retorno lento para estabilidade acontece porque a perturbação enxerga o polo que foi cancelado matematicamente pelo controlador!")
     with st.sidebar.expander("O que é esse cancelamento?"):
         st.write("O controlador Avanço-Atraso anula a inércia lenta do carrinho inserindo um 'zero' em cima do 'polo' original. Isso deixa a resposta à referência muito rápida.")
@@ -136,7 +139,7 @@ t_step, y_step = simulador.simular_resposta_degrau()
 # =====================================================================
 # GERENCIAMENTO E RENDERIZAÇÃO DO LAYOUT DE ABAS MAIN
 # =====================================================================
-tab_principal, tab_calculo, tab_guia = st.tabs(["Principal", "Cálculo Passo a Passo", "Guia"])
+tab_principal, tab_calculo, tab_guia = st.tabs(["Principal", "Compensador ótimo", "Guia"])
 
 with tab_principal:
     renderizar_aba_principal(simulador, t_step, y_step, aplicar_empurrao, t_empurrao, forca_empurrao, aplicar_constante, t_constante, forca_constante, ativar_avanco, ativar_atraso, planta)
