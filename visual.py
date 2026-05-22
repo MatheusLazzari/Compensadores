@@ -61,7 +61,7 @@ def renderizar_aba_principal(simulador, t_step, y_step, aplicar_empurrao, t_empu
         # Usamos colunas para centralizar o checkbox na tela
         col_vazia_esq, col_centro, col_vazia_dir = st.columns([1, 2, 1])
         with col_centro:
-            mostrar_marcadores = st.checkbox("Modo detalhado", value=True)
+            mostrar_marcadores = st.checkbox("Modo detalhado", key="mostrar_marcadores")
         
         usar_compensador = ativar_avanco or ativar_atraso
 
@@ -361,7 +361,7 @@ def renderizar_aba_calculo(m, b, K):
 
 def renderizar_aba_guia():
     """Gera o manual conceitual e teórico explicativo da aplicação."""
-    st.header("Guia de Engenharia de Controle: Compensadores Avanço-Atraso")
+    st.header(" Compensadores Avanço-Atraso")
     st.markdown("Em sistemas reais apenas aumentar o ganho proporcional ($K_c$) não basta. Se você aumentar demais o ganho simples, o carrinho começa a oscilar violentamente e sai da pista.")
     
     col_g1, col_g2 = st.columns(2)
