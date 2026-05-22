@@ -24,20 +24,18 @@ def transformar_carro(x_base, y_base, x_carro, y_carro, angulo_rad):
     
     return (x_rot + x_carro).tolist(), (y_rot + y_carro).tolist()
 
-def criar_animacao_classica(deslocamento_x, referencia_pista, x_anim, y_anim_com_comp, y_anim_sem_comp, usar_compensador, aplicar_empurrao, t_empurrao, forca_empurrao, velocidade_frente):
+def criar_animacao_classica(deslocamento_x, referencia_pista, x_anim, y_anim_com_comp, y_anim_sem_comp, usar_compensador, aplicar_empurrao, t_empurrao, forca_empurrao, aplicar_constante, t_constante, velocidade_frente):
     """Gera o gráfico animado simplificado comparando as trajetórias de forma direta."""
     fig = go.Figure()
     vis_com = True if usar_compensador else False
     vis_sem = False if usar_compensador else True
 
-    # Elementos Base (Traces Estáticos)
     fig.add_trace(go.Scatter(x=deslocamento_x, y=referencia_pista, mode='lines', line=dict(dash='dash', color='blue', width=3), name='Centro da Pista'))
     fig.add_trace(go.Scatter(x=[x_anim[0]], y=[y_anim_com_comp[0]], mode='markers', marker=dict(symbol='square', size=16, color='green'), name='Com Compensador', visible=vis_com))
     fig.add_trace(go.Scatter(x=[x_anim[0]], y=[y_anim_com_comp[0]], mode='lines', line=dict(color='green', width=2), showlegend=False, visible=vis_com))
     fig.add_trace(go.Scatter(x=[x_anim[0]], y=[y_anim_sem_comp[0]], mode='markers', marker=dict(symbol='square', size=16, color='red'), name='Sem Compensador', visible=vis_sem))
     fig.add_trace(go.Scatter(x=[x_anim[0]], y=[y_anim_sem_comp[0]], mode='lines', line=dict(color='red', width=2), showlegend=False, visible=vis_sem))
 
-    # Anotação de Impacto (Setas indicativas de perturbação)
     if aplicar_empurrao:
         x_empurrao = velocidade_frente * t_empurrao
         y_empurrao_idx = np.searchsorted(deslocamento_x, x_empurrao)
@@ -49,7 +47,14 @@ def criar_animacao_classica(deslocamento_x, referencia_pista, x_anim, y_anim_com
             arrowsize=1.5, arrowwidth=3, arrowcolor="white", font=dict(color="white", size=14)
         )
 
-    # Montagem Sequencial dos Frames de Animação
+    if aplicar_constante:
+        x_start = velocidade_frente * t_constante[0]
+        x_end = velocidade_frente * t_constante[1]
+        fig.add_vrect(
+            x0=x_start, x1=x_end, fillcolor="orange", opacity=0.15, layer="below", line_width=0,
+            annotation_text="Vento Lateral Constante", annotation_position="top left", annotation_font=dict(color="orange")
+        )
+
     frames = []
     for i in range(len(x_anim)):
         frame_data = [
@@ -63,7 +68,6 @@ def criar_animacao_classica(deslocamento_x, referencia_pista, x_anim, y_anim_com
             
     fig.frames = frames
 
-    # Configurações de Play/Pause e Layout Geral
     botoes_menu = [
         dict(label="Iniciar", method="animate", args=[None, {"frame": {"duration": 40, "redraw": False}, "fromcurrent": True}]),
         dict(label="Pausar", method="animate", args=[[None], {"frame": {"duration": 0, "redraw": False}, "mode": "immediate"}]),
@@ -78,20 +82,18 @@ def criar_animacao_classica(deslocamento_x, referencia_pista, x_anim, y_anim_com
     )
     return fig
 
-def criar_animacao_carro(deslocamento_x, referencia_pista, x_anim, y_anim, angulos_plotly, aplicar_empurrao, t_empurrao, forca_empurrao, velocidade_frente):
+def criar_animacao_carro(deslocamento_x, referencia_pista, x_anim, y_anim, angulos_plotly, aplicar_empurrao, t_empurrao, forca_empurrao, aplicar_constante, t_constante, velocidade_frente):
     """Gera o ambiente visual simulando a estrada e o desenho das partes do carro (Skin)."""
     fig = go.Figure()
     largura_pista = 1.2
     pista_sup = referencia_pista + largura_pista
     pista_inf = referencia_pista - largura_pista
 
-    # Construção da Estrada Asfáltica
     fig.add_trace(go.Scatter(x=deslocamento_x, y=pista_sup, mode='lines', line=dict(color='dimgray', width=2), showlegend=False))
     fig.add_trace(go.Scatter(x=deslocamento_x, y=pista_inf, mode='lines', fill='tonexty', fillcolor='rgba(105, 105, 105, 0.8)', line=dict(color='dimgray', width=2), name='Estrada'))
     fig.add_trace(go.Scatter(x=deslocamento_x, y=referencia_pista, mode='lines', line=dict(dash='dash', color='white', width=3), name='Faixa Central'))
     fig.add_trace(go.Scatter(x=x_anim, y=y_anim, mode='lines', line=dict(color='rgba(0, 0, 0, 0.3)', width=2), name='Rastro'))
 
-    # Matriz de Componentes Geométricos do Seguidor (Pneus, Chassi, Faróis)
     pecas_carro = [
         ([(6,0,10,4), (34,0,10,4), (6,26,10,4), (34,26,10,4)], '#141414', 'Pneus'),
         ([(0,6,4,18)], '#323232', 'Para-choque'),
@@ -110,7 +112,6 @@ def criar_animacao_carro(deslocamento_x, referencia_pista, x_anim, y_anim, angul
             y_comb.extend(y_arr.tolist() + [np.nan])
         base_shapes.append((np.array(x_comb), np.array(y_comb), cor, nome))
 
-    # Desenha o estado inicial
     angulo_inicial_rad = -np.radians(angulos_plotly[0])
     for x_base, y_base, cor, nome in base_shapes:
         x_trans, y_trans = transformar_carro(x_base, y_base, x_anim[0], y_anim[0], angulo_inicial_rad)
@@ -127,7 +128,14 @@ def criar_animacao_carro(deslocamento_x, referencia_pista, x_anim, y_anim, angul
             arrowsize=1.5, arrowwidth=3, arrowcolor="white", font=dict(color="white", size=16)
         )
 
-    # Animação Dinâmica Frame a Frame do Chassi Rotacionado
+    if aplicar_constante:
+        x_start = velocidade_frente * t_constante[0]
+        x_end = velocidade_frente * t_constante[1]
+        fig.add_vrect(
+            x0=x_start, x1=x_end, fillcolor="orange", opacity=0.2, layer="below", line_width=0,
+            annotation_text="Vento Lateral Constante", annotation_position="top left", annotation_font=dict(color="orange")
+        )
+
     frames = []
     for i in range(len(x_anim)):
         angulo_rad = -np.radians(angulos_plotly[i])
